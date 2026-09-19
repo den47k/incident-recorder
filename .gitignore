@@ -1,0 +1,4 @@
+firmware/build/
+docs/wokwi.vcd
+.cache/
+compile_commands.json
