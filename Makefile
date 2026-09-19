@@ -5,8 +5,10 @@ GID     := $(shell id -g)
 RUN      = $(DOCKER) run --rm -v $(PWD):/workspace -w /workspace --user $(UID):$(GID) $(IMAGE)
 
 ELF     := firmware/build/firmware.elf
+WOKWI   ?= $(shell command -v wokwi-cli 2>/dev/null || echo $(HOME)/bin/wokwi-cli)
+TIMEOUT ?= 20000
 
-.PHONY: all image build rebuild clean size shell
+.PHONY: all image build rebuild clean size shell flash monitor sim
 
 all: build
 
@@ -27,3 +29,9 @@ size:
 shell:
 	$(DOCKER) run --rm -it -v $(PWD):/workspace -w /workspace --user $(UID):$(GID) $(IMAGE) bash
 
+flash: build sim
+
+sim:
+	-$(WOKWI) --timeout $(TIMEOUT) .
+
+monitor: sim
