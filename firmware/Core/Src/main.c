@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,7 +31,14 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define LED_PORT        GPIOA
+#define LED_PIN         GPIO_PIN_5
+#define BTN_PORT        GPIOA
+#define BTN_PIN         GPIO_PIN_12
+#define BTN_SETTLE_MS   50U
+#define SD_CS_PORT      GPIOB
+#define SD_CS_PIN       GPIO_PIN_0
+#define I2C_TIMEOUT_MS  20U
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -51,7 +58,8 @@ TIM_HandleTypeDef htim3;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-
+static volatile uint8_t  button_flag;
+static volatile uint32_t button_last_ms;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -68,7 +76,105 @@ static void MX_USART2_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+int _write(int file, char *ptr, int len)
+{
+  (void)file;
+  HAL_UART_Transmit(&huart2, (uint8_t *)ptr, (uint16_t)len, HAL_MAX_DELAY);
+  return len;
+}
 
+static void print_status(const char *name, int ready)
+{
+  printf("%-6s %s\r\n", name, ready ? "HAL_OK" : "FAIL");
+}
+
+static void i2c_reset(void)
+{
+  HAL_I2C_DeInit(&hi2c1);
+  MX_I2C1_Init();
+}
+
+static void i2c_settle(void)
+{
+  for (volatile uint32_t i = 0; i < 1500U; i++) { __NOP(); }
+}
+
+static int i2c_wait(uint32_t flag)
+{
+  uint32_t t0 = HAL_GetTick();
+  while ((I2C1->ISR & flag) == 0U)
+  {
+    if (I2C1->ISR & I2C_ISR_NACKF)
+    {
+      I2C1->ICR = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
+      return 0;
+    }
+    if ((HAL_GetTick() - t0) > I2C_TIMEOUT_MS) { return 0; }
+  }
+  return 1;
+}
+
+static int i2c_write(uint16_t addr, const uint8_t *data, uint8_t n)
+{
+  I2C1->ICR = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
+  I2C1->ISR = I2C_ISR_TXE;
+  I2C1->CR2 = ((uint32_t)addr & 0xFEU) | ((uint32_t)n << I2C_CR2_NBYTES_Pos)
+              | I2C_CR2_AUTOEND | I2C_CR2_START;
+
+  for (uint8_t i = 0; i < n; i++)
+  {
+    if (!i2c_wait(I2C_ISR_TXIS)) { i2c_reset(); return 0; }
+    i2c_settle();
+    I2C1->TXDR = data[i];
+  }
+  if (!i2c_wait(I2C_ISR_STOPF)) { i2c_reset(); return 0; }
+  I2C1->ICR = I2C_ICR_STOPCF;
+  return 1;
+}
+
+static void i2c_scan(void)
+{
+  uint8_t zero = 0x00;
+
+  printf("i2c scan:");
+  for (uint8_t a = 8; a < 120; a++)
+  {
+    if (i2c_write((uint16_t)(a << 1), &zero, 1)) { printf(" 0x%02X", a); }
+  }
+  printf("\r\n");
+}
+
+static void spi_ping(void)
+{
+  uint8_t tx[8], rx[8];
+
+  for (uint8_t i = 0; i < sizeof tx; i++) { tx[i] = 0xFF; }
+
+  HAL_GPIO_WritePin(SD_CS_PORT, SD_CS_PIN, GPIO_PIN_RESET);
+  HAL_StatusTypeDef st = HAL_SPI_TransmitReceive(&hspi1, tx, rx, sizeof tx, 50);
+  HAL_GPIO_WritePin(SD_CS_PORT, SD_CS_PIN, GPIO_PIN_SET);
+
+  printf("spi ping: %s\r\n", st == HAL_OK ? "ok" : "fail");
+}
+
+static uint16_t adc_read(uint32_t channel)
+{
+  ADC_ChannelConfTypeDef ch = {0};
+  uint16_t value = 0;
+
+  ch.Channel      = channel;
+  ch.Rank         = ADC_REGULAR_RANK_1;
+  ch.SamplingTime = ADC_SAMPLINGTIME_COMMON_1;
+  if (HAL_ADC_ConfigChannel(&hadc1, &ch) != HAL_OK) { return 0; }
+
+  if (HAL_ADC_Start(&hadc1) != HAL_OK) { return 0; }
+  if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK)
+  {
+    value = (uint16_t)HAL_ADC_GetValue(&hadc1);
+  }
+  HAL_ADC_Stop(&hadc1);
+  return value;
+}
 /* USER CODE END 0 */
 
 /**
@@ -106,7 +212,19 @@ int main(void)
   MX_TIM3_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
+  printf("\r\nNUCLEO-C031C6, SYSCLK %lu Hz\r\n", (unsigned long)SystemCoreClock);
+  print_status("USART2", HAL_UART_GetState(&huart2) == HAL_UART_STATE_READY);
+  print_status("I2C1",   HAL_I2C_GetState(&hi2c1) == HAL_I2C_STATE_READY);
+  print_status("SPI1",   HAL_SPI_GetState(&hspi1) == HAL_SPI_STATE_READY);
+  print_status("ADC1",   (HAL_ADC_GetState(&hadc1) & HAL_ADC_STATE_READY) != 0U);
+  print_status("TIM3",   HAL_TIM_PWM_GetState(&htim3) == HAL_TIM_STATE_READY);
 
+  printf("hello from STM32\r\n");
+  i2c_scan();
+  spi_ping();
+
+  uint32_t tick = 0;
+  uint32_t next = HAL_GetTick();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -116,6 +234,31 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    if (button_flag && HAL_GetTick() - button_last_ms >= BTN_SETTLE_MS)
+    {
+      button_flag = 0;
+      if (HAL_GPIO_ReadPin(BTN_PORT, BTN_PIN) == GPIO_PIN_RESET)
+      {
+        printf("button pressed\r\n");
+      }
+    }
+
+    if ((int32_t)(HAL_GetTick() - next) >= 0)
+    {
+      next += 1000;
+      tick++;
+
+      HAL_GPIO_TogglePin(LED_PORT, LED_PIN);
+      printf("tick %lu  adc0=%u adc1=%u led=%s\r\n",
+             (unsigned long)tick, adc_read(ADC_CHANNEL_0), adc_read(ADC_CHANNEL_1),
+             HAL_GPIO_ReadPin(LED_PORT, LED_PIN) ? "on" : "off");
+
+      if ((tick % 5U) == 0U)
+      {
+        i2c_scan();
+        spi_ping();
+      }
+    }
   }
   /* USER CODE END 3 */
 }
@@ -442,7 +585,14 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+void HAL_GPIO_EXTI_Falling_Callback(uint16_t pin)
+{
+  if (pin == BTN_PIN)
+  {
+    button_last_ms = HAL_GetTick();
+    button_flag = 1;
+  }
+}
 /* USER CODE END 4 */
 
 /**
