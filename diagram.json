@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "author": "den47k",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-st-nucleo-c031c6", "id": "nucleo", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-mpu6050", "id": "imu", "top": -130, "left": 230, "attrs": {} },
+    { "type": "wokwi-photoresistor-sensor", "id": "ldr", "top": 170, "left": -200, "attrs": {} },
+    { "type": "wokwi-microsd-card", "id": "sd", "top": 60, "left": 270, "attrs": {} },
+    { "type": "wokwi-pushbutton", "id": "btn", "top": 380, "left": 60,
+      "attrs": { "color": "green", "label": "B1" } },
+    { "type": "wokwi-resistor", "id": "r_scl", "top": -60, "left": 150, "attrs": { "value": "4700" } },
+    { "type": "wokwi-resistor", "id": "r_sda", "top": -20, "left": 150, "attrs": { "value": "4700" } },
+    { "type": "wokwi-logic-analyzer", "id": "la", "top": -140, "left": -340, "attrs": {} }
+  ],
+  "connections": [
+    [ "nucleo:PA2", "$serialMonitor:RX", "", [] ],
+    [ "$serialMonitor:TX", "nucleo:PA3", "", [] ],
+
+    [ "nucleo:PA9", "imu:SCL", "green", [ "v0" ] ],
+    [ "nucleo:PA10", "imu:SDA", "blue", [ "v0" ] ],
+    [ "nucleo:3V3.1", "imu:VCC", "red", [ "v0" ] ],
+    [ "nucleo:GND.1", "imu:GND", "black", [ "v0" ] ],
+    [ "nucleo:PA9", "r_scl:1", "green", [ "v0" ] ],
+    [ "r_scl:2", "nucleo:3V3.1", "red", [ "v0" ] ],
+    [ "nucleo:PA10", "r_sda:1", "blue", [ "v0" ] ],
+    [ "r_sda:2", "nucleo:3V3.1", "red", [ "v0" ] ],
+
+    [ "nucleo:PB3", "sd:SCK", "orange", [ "v0" ] ],
+    [ "nucleo:PB4", "sd:DO", "purple", [ "v0" ] ],
+    [ "nucleo:PB5", "sd:DI", "gold", [ "v0" ] ],
+    [ "nucleo:PB0.1", "sd:CS", "brown", [ "v0" ] ],
+    [ "nucleo:3V3.2", "sd:VCC", "red", [ "v0" ] ],
+    [ "nucleo:GND.2", "sd:GND", "black", [ "v0" ] ],
+
+    [ "nucleo:PA0", "ldr:AO", "cyan", [ "v0" ] ],
+    [ "nucleo:3V3.2", "ldr:VCC", "red", [ "v0" ] ],
+    [ "nucleo:GND.3", "ldr:GND", "black", [ "v0" ] ],
+
+    [ "nucleo:PA12", "btn:1.l", "yellow", [ "v0" ] ],
+    [ "nucleo:GND.4", "btn:2.l", "black", [ "v0" ] ],
+
+    [ "la:D0", "nucleo:PA9", "green", [ "v0" ] ],
+    [ "la:D1", "nucleo:PA10", "blue", [ "v0" ] ],
+    [ "la:D2", "nucleo:PB3", "orange", [ "v0" ] ],
+    [ "la:D3", "nucleo:PB5", "gold", [ "v0" ] ],
+    [ "la:D4", "nucleo:PB4", "purple", [ "v0" ] ],
+    [ "la:D5", "nucleo:PB0.1", "brown", [ "v0" ] ],
+    [ "la:D6", "nucleo:PA2", "white", [ "v0" ] ],
+    [ "la:D7", "nucleo:PA5", "red", [ "v0" ] ],
+    [ "la:GND", "nucleo:GND.1", "black", [ "v0" ] ]
+  ],
+  "dependencies": {}
+}
